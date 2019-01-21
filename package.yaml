@@ -6,13 +6,25 @@ author:              "Sam Roberton"
 maintainer:          "sam@samroberton.com"
 copyright:           "Copyright Sam Roberton"
 
+description:         Please see the README on GitHub at <https://github.com/samroberton/httptest#readme>
+
 extra-source-files:
 - README.md
 
-description:         Please see the README on GitHub at <https://github.com/samroberton/httptest#readme>
+ghc-options:
+- -Werror
+- -Wall
+- -Wcompat
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wredundant-constraints
 
 dependencies:
 - base >= 4.7 && < 5
+- bytestring
+- http-client
+- http-types
+- text
 
 library:
   source-dirs: src
