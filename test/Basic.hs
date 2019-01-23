@@ -1,21 +1,24 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Basic where
 
-import qualified Network.HTTP.Client as HTTP
-import qualified Network.HTTP.Types  as HTTP
+import qualified Data.Text                as T
+import qualified Network.HTTP.Client      as HTTP
+import qualified Network.HTTP.Types       as HTTP
+import qualified Network.Wai              as Wai
+import qualified Network.Wai.Handler.Warp as Warp
+
+import           Test.Tasty.HUnit
 
 import           HttpTest.Parser
 import           HttpTest.Runner
 import           HttpTest.Spec
 
-import           Test.Tasty.HUnit
 
-
-theRequest :: Either MkRequestError HTTP.Request
-theRequest =
+theRequest :: Warp.Port -> Either MkRequestError HTTP.Request
+theRequest port =
   mkRequest
     HTTP.GET
-    "http://httpbin.org/status/200"
+    ("http://localhost:" <> T.pack (show port) <> "/status/200")
     [ ("Accept", "*/*"), ("User-Agent", "httptest") ]
     Nothing
 
@@ -23,17 +26,25 @@ theRequest =
 expectedResponse :: ResponseSpec
 expectedResponse =
   ResponseSpec { respSpecStatus  = HTTP.mkStatus 200 "OK"
-               , respSpecHeaders = [ ("Content-Type", "text/html; charset=utf-8") ]
-               , respSpecBody    = Nothing
+               , respSpecHeaders = [ ("Content-Type", "text/plain; charset=utf-8") ]
+               , respSpecBody    = Just "Hello, world!"
                }
 
 
 unit_basic :: Assertion
 unit_basic =
-  case theRequest of
-    Left e ->
-      print e
-    Right request -> do
-      response <- performRequest request
-      let result = matchResponse expectedResponse response
-      result @?= Right ()
+  Warp.testWithApplication (pure app) $ \port ->
+    case theRequest port of
+      Left e ->
+        assertFailure $ show e
+      Right request -> do
+        response <- performRequest request
+        let result = matchResponse expectedResponse response
+        result @?= Right ()
+
+
+
+app :: Wai.Application
+app req respond = do
+  print req
+  respond $ Wai.responseLBS HTTP.status200 [ ("Content-Type", "text/plain; charset=utf-8") ] "Hello, world!"

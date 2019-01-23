@@ -53,3 +53,5 @@ tests:
     - tasty
     - tasty-hunit
     - tasty-discover
+    - wai
+    - warp
