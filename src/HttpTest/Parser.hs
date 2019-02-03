@@ -15,6 +15,7 @@ import qualified Network.HTTP.Client   as HTTP
 import qualified Network.HTTP.Types    as HTTP
 
 import           Text.Parsec
+import           Text.Parsec.Text
 
 import           HttpTest.Spec
 
@@ -42,78 +43,86 @@ mkRequest method url headers body =
                  }
 
 
+indent
+  :: Parser String
+indent = string "    "
+
+
 callSpecNameParser
-  :: Parsec Text () Text
+  :: Parser Text
 callSpecNameParser = do
-  _ <- count 2 $ char '#' >> spaces
+  _ <- string "##" >> spaces
   callTitle <- manyTill anyChar newline
   return $ T.pack callTitle
 
 
 requestSpecParser
-  :: Parsec Text () RequestSpec
+  :: Parser RequestSpec
 requestSpecParser = do
-  _ <- string "Request:" >> many1 newline
-  indent <- length <$> many1 space
+  _ <- string "Request:"
+  _ <- count 2 newline
+  _ <- indent
   line1 <- T.pack <$> manyTill anyChar newline
-  headers <- many (headerLine indent)
+  headers <- many headerLine
   pure $ RequestSpec { reqSpecLine1 = line1
                      , reqSpecHeaders = headers
                      }
   where
-    headerLine :: Int -> Parsec Text () Text
-    headerLine indent = try $ count indent space >> T.pack <$> manyTill anyChar newline
+    headerLine :: Parser Text
+    headerLine = try $ indent >> T.pack <$> manyTill anyChar newline
 
 
 responseSpecParser
-  :: Parsec Text () ResponseSpec
+  :: Parser ResponseSpec
 responseSpecParser = do
-  _ <- string "Response:" >> many1 newline
-  indent <- length <$> many1 space
+  _ <- string "Response:"
+  _ <- count 2 newline
   status <- statusLine
-  headers <- many (headerLine indent)
-  _ <- many1 newline
-  body <- bodyLines indent
+  headers <- many headerLine
+  _ <- newline
+  body <- bodyLines
   pure $ ResponseSpec { respSpecStatus = status
                       , respSpecHeaders = headers
                       , respSpecBody = T.concat <$> body
                       }
   where
-    statusLine :: Parsec Text () HTTP.Status
+    statusLine :: Parser HTTP.Status
     statusLine = do
+      _ <- indent
       num <- many digit
       _ <- space
       msg <- manyTill anyChar newline
       pure $ HTTP.mkStatus (read num) $ BC.pack msg
 
-    headerLine :: Int -> Parsec Text () HTTP.Header
-    headerLine indent = try $ do
-      _ <- count indent space
+    headerLine :: Parser HTTP.Header
+    headerLine = try $ do
+      _ <- indent
       name <- manyTill anyChar (char ':')
       _ <- many1 space
       val <- manyTill anyChar newline
       pure (CI.mk (BC.pack name), BC.pack val)
 
-    bodyLines :: Int -> Parsec Text () (Maybe [Text])
-    bodyLines indent = optionMaybe $ many $ do
-      _ <- count indent space
+    bodyLines :: Parser (Maybe [Text])
+    bodyLines = optionMaybe $ many $ do
+      _ <- indent
       l <- manyTill anyChar newline
       pure $ T.pack l
 
 
 fileParser
-  :: Parsec Text () (Text, RequestSpec, ResponseSpec)
-fileParser = do
+  :: Parser [(Text, RequestSpec, ResponseSpec)]
+fileParser = many $ do
   call <- callSpecNameParser
   _ <- many1 newline
   req <- requestSpecParser
   _ <- many1 newline
   resp <- responseSpecParser
+  _ <- many newline
   return (call, req, resp)
 
 
 parseFile
   :: Text
   -> Text
-  -> Either ParseError (Text, RequestSpec, ResponseSpec)
+  -> Either ParseError [(Text, RequestSpec, ResponseSpec)]
 parseFile srcName = parse fileParser (T.unpack srcName)

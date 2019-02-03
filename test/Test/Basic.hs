@@ -45,6 +45,5 @@ unit_basic =
 
 
 app :: Wai.Application
-app req respond = do
-  print req
+app req respond =
   respond $ Wai.responseLBS HTTP.status200 [ ("Content-Type", "text/plain; charset=utf-8") ] "Hello, world!"
