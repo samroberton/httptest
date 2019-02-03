@@ -64,12 +64,23 @@ requestSpecParser = do
   _ <- indent
   line1 <- T.pack <$> manyTill anyChar newline
   headers <- many headerLine
-  pure $ RequestSpec { reqSpecLine1 = line1
+  _ <- newline
+  body <- bodyLines
+  pure $ RequestSpec { reqSpecLine1   = line1
                      , reqSpecHeaders = headers
+                     , reqSpecBody    = case body of
+                                          [] -> Nothing
+                                          bs -> Just $ T.intercalate "\n" bs
                      }
   where
     headerLine :: Parser Text
     headerLine = try $ indent >> T.pack <$> manyTill anyChar newline
+
+    bodyLines :: Parser [Text]
+    bodyLines = many $ try $ do
+      _ <- indent
+      l <- manyTill anyChar newline
+      pure $ T.pack l
 
 
 responseSpecParser
@@ -83,7 +94,9 @@ responseSpecParser = do
   body <- bodyLines
   pure $ ResponseSpec { respSpecStatus = status
                       , respSpecHeaders = headers
-                      , respSpecBody = T.concat <$> body
+                      , respSpecBody = case body of
+                                         [] -> Nothing
+                                         bs -> Just $ T.intercalate "\n" bs
                       }
   where
     statusLine :: Parser HTTP.Status
@@ -102,8 +115,8 @@ responseSpecParser = do
       val <- manyTill anyChar newline
       pure (CI.mk (BC.pack name), BC.pack val)
 
-    bodyLines :: Parser (Maybe [Text])
-    bodyLines = optionMaybe $ many $ do
+    bodyLines :: Parser [Text]
+    bodyLines = many $ try $ do
       _ <- indent
       l <- manyTill anyChar newline
       pure $ T.pack l
@@ -115,7 +128,7 @@ fileParser = many $ do
   call <- callSpecNameParser
   _ <- many1 newline
   req <- requestSpecParser
-  _ <- many1 newline
+  _ <- many newline
   resp <- responseSpecParser
   _ <- many newline
   return (call, req, resp)

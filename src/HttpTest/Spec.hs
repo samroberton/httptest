@@ -7,6 +7,7 @@ import qualified Network.HTTP.Types as HTTP
 data RequestSpec =
   RequestSpec { reqSpecLine1   :: Text
               , reqSpecHeaders :: [Text]
+              , reqSpecBody    :: Maybe Text
               }
   deriving (Show, Eq)
 
