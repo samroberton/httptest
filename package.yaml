@@ -22,6 +22,7 @@ ghc-options:
 dependencies:
 - base >= 4.7 && < 5
 - bytestring
+- containers
 - case-insensitive
 - http-client
 - http-types

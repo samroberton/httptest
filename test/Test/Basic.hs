@@ -26,7 +26,7 @@ theRequest port =
 expectedResponse :: ResponseSpec
 expectedResponse =
   ResponseSpec { respSpecStatus  = HTTP.mkStatus 200 "OK"
-               , respSpecHeaders = [ ("Content-Type", "text/plain; charset=utf-8") ]
+               , respSpecHeaders = [ ResponseSpecComponent [(ResponseSpecLiteral "Content-Type: text/plain; charset=utf-8")] ]
                , respSpecBody    = Just "Hello, world!"
                }
 
