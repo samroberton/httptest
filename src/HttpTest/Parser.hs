@@ -6,6 +6,8 @@ module HttpTest.Parser
     ( parseFile
     ) where
 
+import qualified Debug.Trace
+
 import qualified Data.ByteString.Char8 as BC
 import           Data.Functor          (void)
 import           Data.Text             (Text)
@@ -81,7 +83,7 @@ requestSpecLiteralOrVariablesParser =
 -- usage, or vice versa), or leave them as three separate tokens (eg variable
 -- usage, literal newline, variable usage).
 bodyLinesParser
-  :: forall a.
+  :: forall a. Show a =>
      Parser [a]
   -> (Maybe a -> [String] -> Maybe a -> [a])
   -- ^ last `a` of prev line if any -> newlines -> first `a` of next line if any
@@ -121,7 +123,7 @@ bodyLinesParser p combine = go Nothing
             let
               t' = combine lastTokenOfPrevLine (snd <$> nls) (Just t)
             in
-              go (lastMaybe t')
+              fmap (initOrEmpty t' <>) $ go (lastMaybe t')
           (t:ts) -> do
             rest <- go (lastMaybe ts)
             return $ (combine lastTokenOfPrevLine (snd <$> nls) (Just t)) <> initOrEmpty ts <> rest
@@ -165,11 +167,10 @@ requestSpecParser = do
     headerLine :: Parser [RequestSpecLiteralOrVariable]
     headerLine = try (indent *> requestSpecLiteralOrVariablesParser <* endOfLine)
 
-    combineBodyComponents
-      :: Maybe RequestSpecLiteralOrVariable
-      -> [String]
-      -> Maybe RequestSpecLiteralOrVariable
-      -> [RequestSpecLiteralOrVariable]
+    combineBodyComponents :: Maybe RequestSpecLiteralOrVariable
+                          -> [String]
+                          -> Maybe RequestSpecLiteralOrVariable
+                          -> [RequestSpecLiteralOrVariable]
     combineBodyComponents Nothing [] Nothing = []
     combineBodyComponents Nothing nls Nothing = [RequestSpecLiteral $ T.pack (concat nls)]
     combineBodyComponents Nothing nls (Just (RequestSpecLiteral l)) = [RequestSpecLiteral (T.pack (concat nls) <> l)]
@@ -179,15 +180,15 @@ requestSpecParser = do
     combineBodyComponents (Just v@(RequestSpecVariable _)) nls (Just (RequestSpecLiteral l)) = [v, RequestSpecLiteral (T.pack (concat nls) <> l)]
 
 
-responseSpecComponentParser :: Parser ResponseSpecComponent
-responseSpecComponentParser =
-  ResponseSpecComponent <$> many (try variableDefn <|> variableUsage <|> literal)
+responseSpecLiteralOrVariablesParser :: Parser [ResponseSpecLiteralOrVariable]
+responseSpecLiteralOrVariablesParser =
+  many (try variableDefn <|> try variableUsage <|> literal)
   where
     variableDefn :: Parser ResponseSpecLiteralOrVariable
     variableDefn = do
       var <- string "${{" *> variableIdentifier
       _ <- spaces *> string ":=" <* spaces
-      -- FIXME prohibit newlines in regexes?  escapted "/}}"?
+      -- FIXME prohibit newlines in regexes?  escaped "/}}"?
       regex <- char '/' *> manyTill anyChar (string "/}}")
       pure $ ResponseSpecVariableExtraction $ ExtractedVariable var (T.pack regex)
 
@@ -209,12 +210,10 @@ responseSpecParser = do
   status <- statusLine
   headers <- many headerLine
   _ <- endOfLine
-  body <- bodyLines
-  pure $ ResponseSpec { respSpecStatus = status
+  body <- bodyLinesParser responseSpecLiteralOrVariablesParser combineBodyComponents
+  pure $ ResponseSpec { respSpecStatus  = status
                       , respSpecHeaders = headers
-                      , respSpecBody = case body of
-                                         [] -> Nothing
-                                         bs -> Just $ T.intercalate "\n" bs
+                      , respSpecBody    = body
                       }
   where
     statusLine :: Parser HTTP.Status
@@ -225,14 +224,22 @@ responseSpecParser = do
       msg <- manyTill anyChar endOfLine
       pure $ HTTP.mkStatus (read num) $ BC.pack msg
 
-    headerLine :: Parser ResponseSpecComponent
-    headerLine = try (indent *> responseSpecComponentParser <* endOfLine)
+    headerLine :: Parser [ResponseSpecLiteralOrVariable]
+    headerLine = try (indent *> responseSpecLiteralOrVariablesParser <* endOfLine)
 
-    bodyLines :: Parser [Text]
-    bodyLines = many $ try $ do
-      _ <- indent
-      l <- manyTill anyChar endOfLine
-      pure $ T.pack l
+    combineBodyComponents :: Maybe ResponseSpecLiteralOrVariable
+                          -> [String]
+                          -> Maybe ResponseSpecLiteralOrVariable
+                          -> [ResponseSpecLiteralOrVariable]
+    combineBodyComponents Nothing [] Nothing = []
+    combineBodyComponents Nothing nls Nothing = [ResponseSpecLiteral $ T.pack (concat nls)]
+    combineBodyComponents Nothing nls (Just (ResponseSpecLiteral l)) = [ResponseSpecLiteral (T.pack (concat nls) <> l)]
+    combineBodyComponents (Just (ResponseSpecLiteral l))  nls Nothing = [ResponseSpecLiteral (l <> T.pack (concat nls))]
+    combineBodyComponents (Just (ResponseSpecLiteral l1)) nls (Just (ResponseSpecLiteral l2)) = [ResponseSpecLiteral (l1 <> T.pack (concat nls) <> l2)]
+    combineBodyComponents (Just (ResponseSpecLiteral l))  nls (Just v@(ResponseSpecVariableUsage _)) = [ResponseSpecLiteral (l <> T.pack (concat nls)), v]
+    combineBodyComponents (Just (ResponseSpecLiteral l))  nls (Just v@(ResponseSpecVariableExtraction _)) = [ResponseSpecLiteral (l <> T.pack (concat nls)), v]
+    combineBodyComponents (Just v@(ResponseSpecVariableUsage _)) nls (Just (ResponseSpecLiteral l)) = [v, ResponseSpecLiteral (T.pack (concat nls) <> l)]
+    combineBodyComponents (Just v@(ResponseSpecVariableExtraction _)) nls (Just (ResponseSpecLiteral l)) = [v, ResponseSpecLiteral (T.pack (concat nls) <> l)]
 
 
 fileParser :: Parser [(Text, RequestSpec, ResponseSpec)]

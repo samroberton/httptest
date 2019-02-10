@@ -22,18 +22,6 @@ data RequestSpecLiteralOrVariable =
   deriving (Show, Eq)
 
 
-data ResponseSpecLiteralOrVariable =
-  ResponseSpecLiteral Text
-  | ResponseSpecVariableUsage VariableIdentifier
-  | ResponseSpecVariableExtraction ExtractedVariable
-  deriving (Show, Eq)
-
-
-newtype ResponseSpecComponent =
-  ResponseSpecComponent { unResponseSpecComponent :: [ResponseSpecLiteralOrVariable] }
-  deriving (Show, Eq)
-
-
 data RequestSpec =
   RequestSpec { reqSpecLine1   :: [RequestSpecLiteralOrVariable]
               , reqSpecHeaders :: [[RequestSpecLiteralOrVariable]]
@@ -42,10 +30,17 @@ data RequestSpec =
   deriving (Show, Eq)
 
 
+data ResponseSpecLiteralOrVariable =
+  ResponseSpecLiteral Text
+  | ResponseSpecVariableUsage VariableIdentifier
+  | ResponseSpecVariableExtraction ExtractedVariable
+  deriving (Show, Eq)
+
+
 data ResponseSpec =
   ResponseSpec { respSpecStatus  :: HTTP.Status
-               , respSpecHeaders :: [ResponseSpecComponent]
-               , respSpecBody    :: Maybe Text
+               , respSpecHeaders :: [[ResponseSpecLiteralOrVariable]]
+               , respSpecBody    :: [ResponseSpecLiteralOrVariable]
                }
   deriving (Show, Eq)
 
@@ -53,5 +48,5 @@ data ResponseSpec =
 data ResponseMatchFailure =
   DifferentStatus HTTP.Status HTTP.Status
   | DifferentHeader HTTP.Header [HTTP.Header]
-  | DifferentBody (Maybe Text) (Maybe Text)
+  | DifferentBody (Maybe Text) [ResponseSpecLiteralOrVariable] (Maybe Text)
   deriving (Show, Eq)

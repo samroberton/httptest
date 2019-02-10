@@ -25,13 +25,13 @@ literalReqComps = fmap literalReqComp
 
 literalRespComp
   :: Text
-  -> ResponseSpecComponent
-literalRespComp = ResponseSpecComponent . (:[]) . ResponseSpecLiteral
+  -> [ResponseSpecLiteralOrVariable]
+literalRespComp t = [ResponseSpecLiteral t]
 
 
 literalRespComps
   :: [Text]
-  -> [ResponseSpecComponent]
+  -> [[ResponseSpecLiteralOrVariable]]
 literalRespComps = fmap literalRespComp
 
 
@@ -51,7 +51,7 @@ unit_example_01_minimal = do
     resp =
       ResponseSpec { respSpecStatus = HTTP.mkStatus 200 "OK"
                    , respSpecHeaders = literalRespComps [ "Content-Type: text/plain; charset=utf-8" ]
-                   , respSpecBody = Just "Hello, world!"
+                   , respSpecBody = literalRespComp "Hello, world!"
                    }
 
 
@@ -73,7 +73,7 @@ unit_example_02_minimal_two_requests = do
     resp1 =
       ResponseSpec { respSpecStatus = HTTP.mkStatus 200 "OK"
                    , respSpecHeaders = literalRespComps [ "Content-Type: text/plain; charset=utf-8" ]
-                   , respSpecBody = Just "Hello, world!"
+                   , respSpecBody = literalRespComp "Hello, world!"
                    }
 
     req2 =
@@ -87,7 +87,7 @@ unit_example_02_minimal_two_requests = do
     resp2 =
       ResponseSpec { respSpecStatus  = HTTP.mkStatus 404 "Not Found"
                    , respSpecHeaders = literalRespComps [ "Content-Type: text/plain; charset=utf-8" ]
-                   , respSpecBody    = Just "Nothing here!"
+                   , respSpecBody    = literalRespComp "Nothing here!"
                    }
 
 
@@ -109,14 +109,15 @@ unit_example_03_variables = do
 
     resp1 =
       ResponseSpec { respSpecStatus = HTTP.mkStatus 200 "OK"
-                   , respSpecHeaders = [ ResponseSpecComponent [ResponseSpecLiteral "Content-Type: application/json; charset=utf-8"]
-                                         -- FIXME response variable extraction
-                                       , ResponseSpecComponent [ ResponseSpecLiteral "Set-Cookie: "
-                                                               , ResponseSpecVariableExtraction $ ExtractedVariable (VariableIdentifier "authCookie") "auth=([^;]+); .*"
-                                                               ]
+                   , respSpecHeaders = [ literalRespComp "Content-Type: application/json; charset=utf-8"
+                                       , [ ResponseSpecLiteral "Set-Cookie: "
+                                         , ResponseSpecVariableExtraction $ ExtractedVariable (VariableIdentifier "authCookie") "auth=([^;]+); .*"
+                                         ]
                                        ]
-                   -- FIXME response variable extraction in body
-                   , respSpecBody = Just "{\n    \"userId\": ${{userId := /\\d+/}}\n}"
+                   , respSpecBody = [ ResponseSpecLiteral "{\n    \"userId\": "
+                                    , ResponseSpecVariableExtraction $ ExtractedVariable (VariableIdentifier "userId") "\\d+"
+                                    , ResponseSpecLiteral "\n}"
+                                    ]
                    }
 
     req2 =
@@ -135,6 +136,8 @@ unit_example_03_variables = do
     resp2 =
       ResponseSpec { respSpecStatus = HTTP.mkStatus 200 "OK"
                    , respSpecHeaders = literalRespComps [ "Content-Type: application/json; charset=utf-8" ]
-                   -- FIXME response variable usage (in body)
-                   , respSpecBody    = Just "{\n    \"id\": ${userId},\n    \"username\": \"sam\",\n    \"fullName\": \"Sam Roberton\"\n}"
+                   , respSpecBody    = [ ResponseSpecLiteral "{\n    \"id\": "
+                                       , ResponseSpecVariableUsage $ VariableIdentifier "userId"
+                                       , ResponseSpecLiteral ",\n    \"username\": \"sam\",\n    \"fullName\": \"Sam Roberton\"\n}"
+                                       ]
                    }

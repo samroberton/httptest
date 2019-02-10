@@ -80,13 +80,13 @@ matchResponseStatus expected@(HTTP.Status eCode eMsg) actual@(HTTP.Status aCode 
 
 
 matchResponseHeaders
-  :: [ResponseSpecComponent]
+  :: [[ResponseSpecLiteralOrVariable]]
   -> [HTTP.Header]
   -> [ResponseMatchFailure]
 matchResponseHeaders expected actual =
   mapMaybe f expected
   where
-    f (ResponseSpecComponent ((ResponseSpecLiteral lit):[])) =
+    f [(ResponseSpecLiteral lit)] =
       let
         (headerName, headerVal) = T.breakOn ": " lit
         headerName' = CI.mk (TE.encodeUtf8 headerName)
@@ -103,26 +103,34 @@ matchResponseHeaders expected actual =
 
 
 matchResponseBody
-  :: Maybe Text
+  :: [ResponseSpecLiteralOrVariable]
   -> BL.ByteString
   -> [ResponseMatchFailure]
 
-matchResponseBody Nothing actual =
+matchResponseBody [] actual =
   if BL.null actual then
     []
   else
-    [DifferentBody Nothing (Just $ lbsToText actual)]
+    [DifferentBody Nothing [] (Just $ lbsToText actual)]
 
-matchResponseBody expected@(Just et) actual =
+matchResponseBody expected actual =
   let
     at = lbsToText actual
   in
-    if T.null at then
-      [DifferentBody expected Nothing]
-    else if et == at then
-      []
-    else
-      [DifferentBody expected (Just at)]
+    match Nothing expected at
+  where
+    match matched [] at =
+      if T.null at then
+        []
+      else
+        [DifferentBody matched expected Nothing]
+
+    match matched lvs@(ResponseSpecLiteral l:lvs') at =
+      case T.stripPrefix l at of
+        Nothing   -> nope matched lvs at
+        Just rest -> match (matched <> Just l) lvs' rest
+
+    nope matched lvs at = [DifferentBody matched lvs (Just at)]
 
 
 lbsToText
