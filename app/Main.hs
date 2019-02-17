@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import qualified Network.HTTP.Client as HTTP
-import qualified Network.HTTP.Types  as HTTP
+import qualified Network.HTTP.Client     as HTTP
+import qualified Network.HTTP.Types      as HTTP
 
-import           HttpTest.Parser
+import           HttpTest.MarkdownParser
 import           HttpTest.Runner
 import           HttpTest.Spec
 

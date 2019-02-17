@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Test.Parser where
+module Test.MarkdownParser where
 
-import           Data.Text          (Text)
-import qualified Data.Text.IO       as T
-import qualified Network.HTTP.Types as HTTP
+import           Data.Text               (Text)
+import qualified Data.Text.IO            as T
+import qualified Network.HTTP.Types      as HTTP
 
 import           Test.Tasty.HUnit
 
-import           HttpTest.Parser
+import           HttpTest.MarkdownParser
 import           HttpTest.Spec
 
 

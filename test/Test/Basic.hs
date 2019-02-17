@@ -10,7 +10,7 @@ import qualified Network.Wai.Handler.Warp as Warp
 
 import           Test.Tasty.HUnit
 
-import           HttpTest.Parser
+import           HttpTest.MarkdownParser
 import           HttpTest.Runner
 import           HttpTest.Spec
 

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
-module HttpTest.Parser
+module HttpTest.MarkdownParser
     ( parseFile
     ) where
 
