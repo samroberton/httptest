@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Test.Basic where
 
+import           Data.Either.Validation   (Validation (..))
 import qualified Data.Text                as T
 import qualified Network.HTTP.Client      as HTTP
 import qualified Network.HTTP.Types       as HTTP
@@ -14,7 +15,7 @@ import           HttpTest.Runner
 import           HttpTest.Spec
 
 
-theRequest :: Warp.Port -> Either MkRequestError HTTP.Request
+theRequest :: Warp.Port -> Validation [MkRequestError] HTTP.Request
 theRequest port =
   mkRequest
     HTTP.GET
@@ -35,12 +36,12 @@ unit_basic :: Assertion
 unit_basic =
   Warp.testWithApplication (pure app) $ \port ->
     case theRequest port of
-      Left e ->
+      Failure e ->
         assertFailure $ show e
-      Right request -> do
+      Success request -> do
         response <- performRequest request
         let result = matchResponse expectedResponse response
-        result @?= Right ()
+        result @?= Success ()
 
 
 

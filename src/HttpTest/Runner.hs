@@ -9,6 +9,7 @@ module HttpTest.Runner
 
 import qualified Data.ByteString.Lazy    as BL
 import qualified Data.CaseInsensitive    as CI
+import           Data.Either.Validation  (Validation (..))
 import           Data.Maybe              (mapMaybe)
 import           Data.Semigroup          ((<>))
 import           Data.Text               (Text)
@@ -23,26 +24,29 @@ import           HttpTest.Spec
 
 
 data MkRequestError =
-  InvalidUrl Text
+  MissingVariable VariableIdentifier
+  | InvalidMethod Text
+  | InvalidUrl Text
   deriving (Show, Eq)
+
 
 mkRequest
   :: HTTP.StdMethod
   -> Text
   -> [HTTP.Header]
   -> Maybe Text
-  -> Either MkRequestError HTTP.Request
+  -> Validation [MkRequestError] HTTP.Request
 mkRequest method url headers body =
   case (HTTP.parseRequest $ T.unpack url) of
     Nothing ->
-      Left (InvalidUrl url)
+      Failure [InvalidUrl url]
     Just req ->
-      return req { HTTP.method         = HTTP.renderStdMethod method
-                 , HTTP.requestHeaders = headers
-                 , HTTP.requestBody    = case body of
-                                           Just t  -> HTTP.RequestBodyBS (TE.encodeUtf8 t)
-                                           Nothing -> ""
-                 }
+      Success req { HTTP.method         = HTTP.renderStdMethod method
+                  , HTTP.requestHeaders = headers
+                  , HTTP.requestBody    = case body of
+                                            Just t  -> HTTP.RequestBodyBS (TE.encodeUtf8 t)
+                                            Nothing -> ""
+                  }
 
 
 performRequest :: HTTP.Request -> IO (HTTP.Response BL.ByteString)
@@ -54,11 +58,11 @@ performRequest request = do
 matchResponse
   :: ResponseSpec
   -> HTTP.Response BL.ByteString
-  -> Either [ResponseMatchFailure] ()
+  -> Validation [ResponseMatchFailure] ()
 matchResponse ResponseSpec { respSpecStatus, respSpecHeaders, respSpecBody } response =
   case result of
-    [] -> Right ()
-    es -> Left es
+    [] -> Success ()
+    es -> Failure es
   where
     result =
       matchResponseStatus respSpecStatus (HTTP.responseStatus response)

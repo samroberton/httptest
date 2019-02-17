@@ -24,6 +24,7 @@ dependencies:
 - bytestring
 - containers
 - case-insensitive
+- either
 - http-client
 - http-types
 - parsec
