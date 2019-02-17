@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
 module HttpTest.Parser
     ( parseFile
     ) where
@@ -95,7 +94,7 @@ bodyLinesParser p combine = go Nothing
         -> Parser [a]
       go lastTokenOfPrevLine = do
         nls <- manyNewlines
-        go' lastTokenOfPrevLine nls <|> (return $ finish lastTokenOfPrevLine nls)
+        go' lastTokenOfPrevLine nls <|> return (finish lastTokenOfPrevLine nls)
 
       finish
         :: Maybe a
@@ -118,15 +117,15 @@ bodyLinesParser p combine = go Nothing
         line <- indent *> p
         case line of
           [] ->
-            unexpected $ "no tokens for non-empty line"
+            unexpected "no tokens for non-empty line"
           [t] ->
             let
               t' = combine lastTokenOfPrevLine (snd <$> nls) (Just t)
             in
-              fmap (initOrEmpty t' <>) $ go (lastMaybe t')
+              (initOrEmpty t' <>) <$> go (lastMaybe t')
           (t:ts) -> do
             rest <- go (lastMaybe ts)
-            return $ (combine lastTokenOfPrevLine (snd <$> nls) (Just t)) <> initOrEmpty ts <> rest
+            return $ combine lastTokenOfPrevLine (snd <$> nls) (Just t) <> initOrEmpty ts <> rest
 
       manyNewlines
         :: Parser [(Bool, String)]
@@ -258,11 +257,11 @@ parseFile srcName = parse fileParser (T.unpack srcName)
 
 lastMaybe :: [a] -> Maybe a
 lastMaybe [] = Nothing
-lastMaybe (a:[]) = Just a
+lastMaybe [a] = Just a
 lastMaybe (_:as) = lastMaybe as
 
 
 initOrEmpty :: [a] -> [a]
 initOrEmpty [] = []
-initOrEmpty (a:[]) = []
+initOrEmpty [a] = []
 initOrEmpty (a:as) = a : initOrEmpty as

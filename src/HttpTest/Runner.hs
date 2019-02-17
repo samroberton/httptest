@@ -37,7 +37,7 @@ mkRequest
   -> Maybe Text
   -> Validation [MkRequestError] HTTP.Request
 mkRequest method url headers body =
-  case (HTTP.parseRequest $ T.unpack url) of
+  case HTTP.parseRequest (T.unpack url) of
     Nothing ->
       Failure [InvalidUrl url]
     Just req ->
@@ -76,7 +76,7 @@ matchResponseStatus
   :: [ResponseSpecLiteralOrVariable]
   -> HTTP.Status
   -> [ResponseMatchFailure]
-matchResponseStatus [(ResponseSpecLiteral expected)] actual@(HTTP.Status s msg) =
+matchResponseStatus [ResponseSpecLiteral expected] actual@(HTTP.Status s msg) =
   if expected == (T.pack (show s) <> " " <> TE.decodeUtf8 msg) then
     []
   else
@@ -93,7 +93,7 @@ matchResponseHeaders
 matchResponseHeaders expected actual =
   mapMaybe f expected
   where
-    f [(ResponseSpecLiteral lit)] =
+    f [ResponseSpecLiteral lit] =
       let
         (headerName, headerVal) = T.breakOn ": " lit
         headerName' = CI.mk (TE.encodeUtf8 headerName)
