@@ -1,6 +1,6 @@
 ## Login
 
-Request:
+### Request
 
     POST /login
     Accept: */*
@@ -13,7 +13,7 @@ Request:
     }
 
 
-Response:
+### Response
 
     200 OK
     Content-Type: application/json; charset=utf-8
@@ -27,7 +27,7 @@ Response:
 
 ## Get User
 
-Request:
+### Request
 
     GET /user/${userId}
     Accept: */*
@@ -35,7 +35,7 @@ Request:
     Cookie: ${authCookie}
 
 
-Response:
+### Response
 
     200 OK
     Content-Type: application/json; charset=utf-8

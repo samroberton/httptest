@@ -1,13 +1,13 @@
 ## Call 1
 
-Request:
+### Request
 
     GET /status/200
     Accept: */*
     User-Agent: httptest
 
 
-Response:
+### Response
 
     200 OK
     Content-Type: text/plain; charset=utf-8
@@ -17,14 +17,14 @@ Response:
 
 ## Call 2
 
-Request:
+### Request
 
     GET /status/404
     Accept: */*
     User-Agent: httptest
 
 
-Response:
+### Response
 
     404 Not Found
     Content-Type: text/plain; charset=utf-8

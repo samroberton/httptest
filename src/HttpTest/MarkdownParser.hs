@@ -151,7 +151,9 @@ indentedLinesParser p combine = go Nothing
 requestSpecParser
   :: Parser RequestSpec
 requestSpecParser =
-  RequestSpec <$> ( string "Request:"
+  RequestSpec <$> ( string "###"
+                    *> spaces
+                    *> string "Request"
                     *> count 2 endOfLine
                     *> many endOfLine
                     *> indentedLinesParser requestSpecLiteralOrVariablesParser combine
@@ -201,7 +203,9 @@ responseSpecLiteralOrVariablesParser =
 responseSpecParser
   :: Parser ResponseSpec
 responseSpecParser =
-  ResponseSpec <$> ( string "Response:"
+  ResponseSpec <$> ( string "###"
+                     *> spaces
+                     *> string "Response"
                      *> count 2 endOfLine
                      *> many endOfLine
                      *> indentedLinesParser responseSpecLiteralOrVariablesParser combine
