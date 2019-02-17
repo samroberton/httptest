@@ -62,32 +62,32 @@ requestSpecLiteralOrVariablesParser =
 
 
 
--- | Take a parser for a single line of a request or response body, without
--- indent, and produce a parser for a (multi-line) body where the body is
--- indented, and where the parser will stop consuming input when it sees a
--- newline with non-indented text.
+-- | Take a parser for a list of tokens, where parsing the tokens will never
+-- consume a newline, and produce a parser for multi-line indented text, where
+-- the parser will stop consuming input when it sees a newline with non-indented
+-- text.
 --
--- Like the rest of the HTTP request, the request/response body is indented by
--- four spaces, but we allow non-trailing empty lines within the body to omit
--- the indent (to avoid mandating lines with trailing whitespace).
+-- Our HTTP requests/responses are indented by four spaces, but we allow
+-- non-trailing empty lines to omit the indent (to avoid mandating lines with
+-- trailing whitespace).
 --
 -- Multiple consecutive newlines (without indent) immediately before a
 -- non-indented line will be ignored.
 --
--- Parsers for request/response body lines produce a list of tokens `[a]`, where
--- each token `a` is eg a literal or a variable usage.  `bodyLinesParser` will
--- parse each line individually, but use `combine` to allow you to combine the
--- end of one line, the newline(s), and the beginning of the next line into one
--- single token (eg one literal), or two tokens (eg one literal and one variable
--- usage, or vice versa), or leave them as three separate tokens (eg variable
--- usage, literal newline, variable usage).
-bodyLinesParser
-  :: forall a. Show a =>
+-- Parsers for request/response body lines produce a list of tokens, where each
+-- tokenis eg a literal or a variable usage.  `indentedLinesParser` will parse
+-- each line individually, but use `combine` to allow you to combine the end of
+-- one line, the newline(s), and the beginning of the next line into one single
+-- token (eg one literal), or two tokens (eg one literal and one variable usage,
+-- or vice versa), or leave them as three separate tokens (eg variable usage,
+-- literal newline, variable usage).
+indentedLinesParser
+  :: forall a.
      Parser [a]
   -> (Maybe a -> [String] -> Maybe a -> [a])
   -- ^ last `a` of prev line if any -> newlines -> first `a` of next line if any
   -> Parser [a]
-bodyLinesParser p combine = go Nothing
+indentedLinesParser p combine = go Nothing
     where
       go
         :: Maybe a
@@ -148,38 +148,34 @@ bodyLinesParser p combine = go Nothing
           Just _  -> (True, nl)
 
 
-requestSpecParser :: Parser RequestSpec
-requestSpecParser = do
-  _ <- string "Request:"
-  _ <- count 2 endOfLine
-  _ <- indent
-  line1 <- requestSpecLiteralOrVariablesParser
-  _ <- endOfLine
-  headers <- many headerLine
-  _ <- endOfLine
-  body <- bodyLinesParser requestSpecLiteralOrVariablesParser combineBodyComponents
-  pure $ RequestSpec { reqSpecLine1   = line1
-                     , reqSpecHeaders = headers
-                     , reqSpecBody    = body
-                     }
+requestSpecParser
+  :: Parser RequestSpec
+requestSpecParser =
+  RequestSpec <$> ( string "Request:"
+                    *> count 2 endOfLine
+                    *> many endOfLine
+                    *> indentedLinesParser requestSpecLiteralOrVariablesParser combine
+                  )
   where
-    headerLine :: Parser [RequestSpecLiteralOrVariable]
-    headerLine = try (indent *> requestSpecLiteralOrVariablesParser <* endOfLine)
+    combine
+      :: Maybe RequestSpecLiteralOrVariable
+      -> [String]
+      -> Maybe RequestSpecLiteralOrVariable
+      -> [RequestSpecLiteralOrVariable]
+    combine (Just a) [] Nothing = [a]
+    combine Nothing nls Nothing = [RequestSpecLiteral $ T.pack (concat nls)]
+    combine Nothing nls (Just (RequestSpecLiteral l)) = [RequestSpecLiteral (T.pack (concat nls) <> l)]
+    combine Nothing nls (Just v@(RequestSpecVariable _)) = [RequestSpecLiteral (T.pack (concat nls)), v]
+    combine (Just (RequestSpecLiteral l))  nls Nothing = [RequestSpecLiteral (l <> T.pack (concat nls))]
+    combine (Just (RequestSpecLiteral l1)) nls (Just (RequestSpecLiteral l2)) = [RequestSpecLiteral (l1 <> T.pack (concat nls) <> l2)]
+    combine (Just (RequestSpecLiteral l))  nls (Just v@(RequestSpecVariable _)) = [RequestSpecLiteral (l <> T.pack (concat nls)), v]
+    combine (Just v@(RequestSpecVariable _)) nls Nothing = [v, RequestSpecLiteral (T.pack (concat nls))]
+    combine (Just v@(RequestSpecVariable _)) nls (Just (RequestSpecLiteral l)) = [v, RequestSpecLiteral (T.pack (concat nls) <> l)]
+    combine (Just v1@(RequestSpecVariable _)) nls (Just v2@(RequestSpecVariable _)) = [v1, RequestSpecLiteral (T.pack (concat nls)), v2]
 
-    combineBodyComponents :: Maybe RequestSpecLiteralOrVariable
-                          -> [String]
-                          -> Maybe RequestSpecLiteralOrVariable
-                          -> [RequestSpecLiteralOrVariable]
-    combineBodyComponents Nothing [] Nothing = []
-    combineBodyComponents Nothing nls Nothing = [RequestSpecLiteral $ T.pack (concat nls)]
-    combineBodyComponents Nothing nls (Just (RequestSpecLiteral l)) = [RequestSpecLiteral (T.pack (concat nls) <> l)]
-    combineBodyComponents (Just (RequestSpecLiteral l))  nls Nothing = [RequestSpecLiteral (l <> T.pack (concat nls))]
-    combineBodyComponents (Just (RequestSpecLiteral l1)) nls (Just (RequestSpecLiteral l2)) = [RequestSpecLiteral (l1 <> T.pack (concat nls) <> l2)]
-    combineBodyComponents (Just (RequestSpecLiteral l))  nls (Just v@(RequestSpecVariable _)) = [RequestSpecLiteral (l <> T.pack (concat nls)), v]
-    combineBodyComponents (Just v@(RequestSpecVariable _)) nls (Just (RequestSpecLiteral l)) = [v, RequestSpecLiteral (T.pack (concat nls) <> l)]
 
-
-responseSpecLiteralOrVariablesParser :: Parser [ResponseSpecLiteralOrVariable]
+responseSpecLiteralOrVariablesParser
+  :: Parser [ResponseSpecLiteralOrVariable]
 responseSpecLiteralOrVariablesParser =
   many (try variableDefn <|> try variableUsage <|> literal)
   where
@@ -202,41 +198,33 @@ responseSpecLiteralOrVariablesParser =
         lit' -> pure $ ResponseSpecLiteral (T.pack lit')
 
 
-responseSpecParser :: Parser ResponseSpec
-responseSpecParser = do
-  _ <- string "Response:"
-  _ <- count 2 endOfLine
-  status <- statusLine
-  headers <- many headerLine
-  _ <- endOfLine
-  body <- bodyLinesParser responseSpecLiteralOrVariablesParser combineBodyComponents
-  pure $ ResponseSpec { respSpecStatus  = status
-                      , respSpecHeaders = headers
-                      , respSpecBody    = body
-                      }
+responseSpecParser
+  :: Parser ResponseSpec
+responseSpecParser =
+  ResponseSpec <$> ( string "Response:"
+                     *> count 2 endOfLine
+                     *> many endOfLine
+                     *> indentedLinesParser responseSpecLiteralOrVariablesParser combine
+                   )
   where
-    statusLine :: Parser [ResponseSpecLiteralOrVariable]
-    statusLine = indent *> responseSpecLiteralOrVariablesParser <* endOfLine
-
-    headerLine :: Parser [ResponseSpecLiteralOrVariable]
-    headerLine = try (indent *> responseSpecLiteralOrVariablesParser <* endOfLine)
-
-    combineBodyComponents :: Maybe ResponseSpecLiteralOrVariable
-                          -> [String]
-                          -> Maybe ResponseSpecLiteralOrVariable
-                          -> [ResponseSpecLiteralOrVariable]
-    combineBodyComponents Nothing [] Nothing = []
-    combineBodyComponents Nothing nls Nothing = [ResponseSpecLiteral $ T.pack (concat nls)]
-    combineBodyComponents Nothing nls (Just (ResponseSpecLiteral l)) = [ResponseSpecLiteral (T.pack (concat nls) <> l)]
-    combineBodyComponents (Just (ResponseSpecLiteral l))  nls Nothing = [ResponseSpecLiteral (l <> T.pack (concat nls))]
-    combineBodyComponents (Just (ResponseSpecLiteral l1)) nls (Just (ResponseSpecLiteral l2)) = [ResponseSpecLiteral (l1 <> T.pack (concat nls) <> l2)]
-    combineBodyComponents (Just (ResponseSpecLiteral l))  nls (Just v@(ResponseSpecVariableUsage _)) = [ResponseSpecLiteral (l <> T.pack (concat nls)), v]
-    combineBodyComponents (Just (ResponseSpecLiteral l))  nls (Just v@(ResponseSpecVariableExtraction _)) = [ResponseSpecLiteral (l <> T.pack (concat nls)), v]
-    combineBodyComponents (Just v@(ResponseSpecVariableUsage _)) nls (Just (ResponseSpecLiteral l)) = [v, ResponseSpecLiteral (T.pack (concat nls) <> l)]
-    combineBodyComponents (Just v@(ResponseSpecVariableExtraction _)) nls (Just (ResponseSpecLiteral l)) = [v, ResponseSpecLiteral (T.pack (concat nls) <> l)]
+    combine
+      :: Maybe ResponseSpecLiteralOrVariable
+      -> [String]
+      -> Maybe ResponseSpecLiteralOrVariable
+      -> [ResponseSpecLiteralOrVariable]
+    combine (Just a) [] Nothing = [a]
+    combine Nothing nls Nothing = [ResponseSpecLiteral $ T.pack (concat nls)]
+    combine Nothing nls (Just (ResponseSpecLiteral l)) = [ResponseSpecLiteral (T.pack (concat nls) <> l)]
+    combine (Just (ResponseSpecLiteral l))  nls Nothing = [ResponseSpecLiteral (l <> T.pack (concat nls))]
+    combine (Just (ResponseSpecLiteral l1)) nls (Just (ResponseSpecLiteral l2)) = [ResponseSpecLiteral (l1 <> T.pack (concat nls) <> l2)]
+    combine (Just (ResponseSpecLiteral l))  nls (Just v@(ResponseSpecVariableUsage _)) = [ResponseSpecLiteral (l <> T.pack (concat nls)), v]
+    combine (Just (ResponseSpecLiteral l))  nls (Just v@(ResponseSpecVariableExtraction _)) = [ResponseSpecLiteral (l <> T.pack (concat nls)), v]
+    combine (Just v@(ResponseSpecVariableUsage _)) nls (Just (ResponseSpecLiteral l)) = [v, ResponseSpecLiteral (T.pack (concat nls) <> l)]
+    combine (Just v@(ResponseSpecVariableExtraction _)) nls (Just (ResponseSpecLiteral l)) = [v, ResponseSpecLiteral (T.pack (concat nls) <> l)]
 
 
-fileParser :: Parser [(Text, RequestSpec, ResponseSpec)]
+fileParser
+  :: Parser [(Text, RequestSpec, ResponseSpec)]
 fileParser = many $ do
   call <- callSpecNameParser
   _ <- many1 endOfLine
@@ -247,21 +235,26 @@ fileParser = many $ do
   return (call, req, resp)
 
 
-parseFile :: Text
-          -> Text
-          -> Either ParseError [(Text, RequestSpec, ResponseSpec)]
+parseFile
+  :: Text
+  -> Text
+  -> Either ParseError [(Text, RequestSpec, ResponseSpec)]
 parseFile srcName = parse fileParser (T.unpack srcName)
 
 
 -- Util functions.
 
-lastMaybe :: [a] -> Maybe a
+lastMaybe
+  :: [a]
+  -> Maybe a
 lastMaybe [] = Nothing
 lastMaybe [a] = Just a
 lastMaybe (_:as) = lastMaybe as
 
 
-initOrEmpty :: [a] -> [a]
+initOrEmpty
+  :: [a]
+  -> [a]
 initOrEmpty [] = []
-initOrEmpty [a] = []
+initOrEmpty [_] = []
 initOrEmpty (a:as) = a : initOrEmpty as

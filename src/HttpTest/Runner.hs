@@ -10,6 +10,7 @@ module HttpTest.Runner
 import qualified Data.ByteString.Lazy    as BL
 import qualified Data.CaseInsensitive    as CI
 import           Data.Either.Validation  (Validation (..))
+import qualified Data.Map                as M
 import           Data.Maybe              (mapMaybe)
 import           Data.Semigroup          ((<>))
 import           Data.Text               (Text)
@@ -57,45 +58,89 @@ performRequest request = do
 
 matchResponse
   :: ResponseSpec
+  -> Environment
   -> HTTP.Response BL.ByteString
   -> Validation [ResponseMatchFailure] ()
-matchResponse ResponseSpec { respSpecStatus, respSpecHeaders, respSpecBody } response =
-  case result of
-    [] -> Success ()
-    es -> Failure es
+matchResponse (ResponseSpec rs) env response =
+  case splitResponse rs env of
+    Failure f ->
+      Failure f
+    Success (status, headers, body) ->
+      let
+        result = matchResponseStatus status (HTTP.responseStatus response)
+                 <>
+                 matchResponseHeaders headers (HTTP.responseHeaders response)
+                 <>
+                 matchResponseBody body (HTTP.responseBody response)
+      in
+        case result of
+          [] -> Success ()
+          es -> Failure es
+
+
+substituteResp
+  :: Environment
+  -> [ResponseSpecLiteralOrVariable]
+  -> Validation [ResponseMatchFailure] Text
+substituteResp (Environment env) = foldl go (Success "")
   where
-    result =
-      matchResponseStatus respSpecStatus (HTTP.responseStatus response)
-      <>
-      matchResponseHeaders respSpecHeaders (HTTP.responseHeaders response)
-      <>
-      matchResponseBody respSpecBody (HTTP.responseBody response)
+    go (Success t) (ResponseSpecLiteral  t') = Success (t <> t')
+    go (Success t) (ResponseSpecVariableUsage v) =
+      case M.lookup v env of
+        Just t' -> Success (t <> t')
+        Nothing -> Failure [MissingResponseVariable v]
+
+    go r@(Failure _)   (ResponseSpecLiteral  _) = r
+    go r@(Failure mvs) (ResponseSpecVariableUsage v) =
+      case M.lookup v env of
+        Just _  -> r
+        Nothing -> Failure (mvs <> [MissingResponseVariable v])
+
+
+splitResponse
+  :: [ResponseSpecLiteralOrVariable]
+  -> Environment
+  -> Validation [ResponseMatchFailure] (Text, [Text], Maybe Text)
+splitResponse lvs env =
+  case substituteResp env lvs of
+    Failure f -> Failure f
+    Success t ->
+      let
+        (preamble, body') = T.breakOn "\n\n" t
+        (statusLine:headers) = T.splitOn "\n" preamble
+      in
+        case T.stripPrefix "\n\n" body' of
+          Nothing ->
+            if T.null body' then
+              Success (statusLine, headers, Nothing)
+            else
+              Failure [UnparseableResponseSpec t]
+          (Just "") ->
+            Success (statusLine, headers, Nothing)
+          (Just b)  -> Success (statusLine, headers, Just b)
 
 
 matchResponseStatus
-  :: [ResponseSpecLiteralOrVariable]
+  :: Text
   -> HTTP.Status
   -> [ResponseMatchFailure]
-matchResponseStatus [ResponseSpecLiteral expected] actual@(HTTP.Status s msg) =
+matchResponseStatus expected actual@(HTTP.Status s msg) =
   if expected == (T.pack (show s) <> " " <> TE.decodeUtf8 msg) then
     []
   else
     [DifferentStatus expected actual]
 
-matchResponseStatus lvs actual =
-  [DifferentStatus (T.pack $ show lvs) actual]
-
 
 matchResponseHeaders
-  :: [[ResponseSpecLiteralOrVariable]]
+  :: [Text]
   -> [HTTP.Header]
   -> [ResponseMatchFailure]
 matchResponseHeaders expected actual =
   mapMaybe f expected
   where
-    f [ResponseSpecLiteral lit] =
+    f t =
       let
-        (headerName, headerVal) = T.breakOn ": " lit
+        (headerName, headerVal) = T.breakOn ": " t
         headerName' = CI.mk (TE.encodeUtf8 headerName)
         header =
           if T.null headerVal then
@@ -110,34 +155,18 @@ matchResponseHeaders expected actual =
 
 
 matchResponseBody
-  :: [ResponseSpecLiteralOrVariable]
+  :: Maybe Text
   -> BL.ByteString
   -> [ResponseMatchFailure]
 
-matchResponseBody [] actual =
-  if BL.null actual then
-    []
-  else
-    [DifferentBody Nothing [] (Just $ lbsToText actual)]
-
 matchResponseBody expected actual =
   let
-    at = lbsToText actual
+    actual' = if BL.null actual then Nothing else Just (lbsToText actual)
   in
-    match Nothing expected at
-  where
-    match matched [] at =
-      if T.null at then
-        []
-      else
-        [DifferentBody matched expected Nothing]
-
-    match matched lvs@(ResponseSpecLiteral l:lvs') at =
-      case T.stripPrefix l at of
-        Nothing   -> nope matched lvs at
-        Just rest -> match (matched <> Just l) lvs' rest
-
-    nope matched lvs at = [DifferentBody matched lvs (Just at)]
+    if expected == actual' then
+      []
+    else
+      [DifferentBody expected (Just $ lbsToText actual)]
 
 
 lbsToText

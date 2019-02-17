@@ -1,12 +1,13 @@
 module HttpTest.Spec where
 
+import qualified Data.Map           as M
 import           Data.Text          (Text)
 import qualified Network.HTTP.Types as HTTP
 
 
 newtype VariableIdentifier =
   VariableIdentifier { unVariableIdentifier :: Text }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 
 data ExtractedVariable =
@@ -22,11 +23,8 @@ data RequestSpecLiteralOrVariable =
   deriving (Show, Eq)
 
 
-data RequestSpec =
-  RequestSpec { reqSpecLine1   :: [RequestSpecLiteralOrVariable]
-              , reqSpecHeaders :: [[RequestSpecLiteralOrVariable]]
-              , reqSpecBody    :: [RequestSpecLiteralOrVariable]
-              }
+newtype RequestSpec =
+  RequestSpec { unRequestSpec :: [RequestSpecLiteralOrVariable] }
   deriving (Show, Eq)
 
 
@@ -37,16 +35,20 @@ data ResponseSpecLiteralOrVariable =
   deriving (Show, Eq)
 
 
-data ResponseSpec =
-  ResponseSpec { respSpecStatus  :: [ResponseSpecLiteralOrVariable]
-               , respSpecHeaders :: [[ResponseSpecLiteralOrVariable]]
-               , respSpecBody    :: [ResponseSpecLiteralOrVariable]
-               }
+newtype ResponseSpec =
+  ResponseSpec { unResponseSpec :: [ResponseSpecLiteralOrVariable] }
+  deriving (Show, Eq)
+
+
+newtype Environment =
+  Environment { unEnvironment :: M.Map VariableIdentifier Text }
   deriving (Show, Eq)
 
 
 data ResponseMatchFailure =
-  DifferentStatus Text HTTP.Status
+  MissingResponseVariable VariableIdentifier
+  | UnparseableResponseSpec Text
+  | DifferentStatus Text HTTP.Status
   | DifferentHeader HTTP.Header [HTTP.Header]
-  | DifferentBody (Maybe Text) [ResponseSpecLiteralOrVariable] (Maybe Text)
+  | DifferentBody (Maybe Text) (Maybe Text)
   deriving (Show, Eq)

@@ -26,21 +26,27 @@ theRequest port =
 
 expectedResponse :: ResponseSpec
 expectedResponse =
-  ResponseSpec { respSpecStatus  = [ResponseSpecLiteral "200 OK"]
-               , respSpecHeaders = [[ResponseSpecLiteral "Content-Type: text/plain; charset=utf-8"]]
-               , respSpecBody    = [ResponseSpecLiteral "Hello, world!"]
-               }
+  ResponseSpec ( [ResponseSpecLiteral ( T.intercalate "\n" [ "200 OK"
+                                                           , "Content-Type: text/plain; charset=utf-8"
+                                                           , ""
+                                                           , "Hello, world!"]
+                                      )
+                 ]
+               )
 
 
 unit_basic :: Assertion
 unit_basic =
   Warp.testWithApplication (pure app) $ \port ->
+    let
+      env = Environment mempty
+    in
     case theRequest port of
       Failure e ->
         assertFailure $ show e
       Success request -> do
         response <- performRequest request
-        let result = matchResponse expectedResponse response
+        let result = matchResponse expectedResponse env response
         result @?= Success ()
 
 
