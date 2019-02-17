@@ -216,13 +216,8 @@ responseSpecParser = do
                       , respSpecBody    = body
                       }
   where
-    statusLine :: Parser HTTP.Status
-    statusLine = do
-      _ <- indent
-      num <- many digit
-      _ <- space
-      msg <- manyTill anyChar endOfLine
-      pure $ HTTP.mkStatus (read num) $ BC.pack msg
+    statusLine :: Parser [ResponseSpecLiteralOrVariable]
+    statusLine = indent *> responseSpecLiteralOrVariablesParser <* endOfLine
 
     headerLine :: Parser [ResponseSpecLiteralOrVariable]
     headerLine = try (indent *> responseSpecLiteralOrVariablesParser <* endOfLine)

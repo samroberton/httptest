@@ -69,14 +69,17 @@ matchResponse ResponseSpec { respSpecStatus, respSpecHeaders, respSpecBody } res
 
 
 matchResponseStatus
-  :: HTTP.Status
+  :: [ResponseSpecLiteralOrVariable]
   -> HTTP.Status
   -> [ResponseMatchFailure]
-matchResponseStatus expected@(HTTP.Status eCode eMsg) actual@(HTTP.Status aCode aMsg) =
-  if eCode == aCode && eMsg == aMsg then
+matchResponseStatus [(ResponseSpecLiteral expected)] actual@(HTTP.Status s msg) =
+  if expected == (T.pack (show s) <> " " <> TE.decodeUtf8 msg) then
     []
   else
     [DifferentStatus expected actual]
+
+matchResponseStatus lvs actual =
+  [DifferentStatus (T.pack $ show lvs) actual]
 
 
 matchResponseHeaders

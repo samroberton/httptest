@@ -38,7 +38,7 @@ data ResponseSpecLiteralOrVariable =
 
 
 data ResponseSpec =
-  ResponseSpec { respSpecStatus  :: HTTP.Status
+  ResponseSpec { respSpecStatus  :: [ResponseSpecLiteralOrVariable]
                , respSpecHeaders :: [[ResponseSpecLiteralOrVariable]]
                , respSpecBody    :: [ResponseSpecLiteralOrVariable]
                }
@@ -46,7 +46,7 @@ data ResponseSpec =
 
 
 data ResponseMatchFailure =
-  DifferentStatus HTTP.Status HTTP.Status
+  DifferentStatus Text HTTP.Status
   | DifferentHeader HTTP.Header [HTTP.Header]
   | DifferentBody (Maybe Text) [ResponseSpecLiteralOrVariable] (Maybe Text)
   deriving (Show, Eq)
