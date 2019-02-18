@@ -11,7 +11,7 @@ import           HttpTest.Runner
 import           HttpTest.Spec
 
 
-theRequest :: Validation [MkRequestError] HTTP.Request
+theRequest :: Validation [MessageCreateError] HTTP.Request
 theRequest =
   mkRequest
     HTTP.GET
@@ -20,9 +20,11 @@ theRequest =
     Nothing
 
 
-expectedResponse :: ResponseSpec
+expectedResponse :: MessageSpec
 expectedResponse =
-  ResponseSpec [ ResponseSpecLiteral "200 OK\nContent-Type: text/html; charset=utf-8" ]
+  MessageSpec { messageSpecTokens = [ MessageTokenLiteral "200 OK\nContent-Type: text/html; charset=utf-8" ]
+              , messageSpecExtractions = []
+              }
 
 
 

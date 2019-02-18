@@ -29,27 +29,27 @@ endOfLine' = try (string "\r\n") <|> string "\n"
 
 
 variableIdentifier :: Parser VariableIdentifier
-variableIdentifier = VariableIdentifier . T.pack <$> many1 alphaNum
+variableIdentifier = VariableIdentifier . T.pack <$> (spaces *> many1 alphaNum <* spaces)
 
 
 callSpecNameParser :: Parser Text
 callSpecNameParser = T.pack <$> (string "##" *> spaces *> manyTill anyChar endOfLine)
 
 
-requestSpecLiteralOrVariablesParser :: Parser [RequestSpecLiteralOrVariable]
-requestSpecLiteralOrVariablesParser =
+messageTokenParser :: Parser [MessageToken]
+messageTokenParser =
   many (variable <|> literal)
   where
-    variable :: Parser RequestSpecLiteralOrVariable
-    variable = RequestSpecVariable <$> (string "${" *> variableIdentifier <* string "}")
+    variable :: Parser MessageToken
+    variable = MessageTokenVariable <$> (string "${" *> variableIdentifier <* string "}")
 
-    literal :: Parser RequestSpecLiteralOrVariable
+    literal :: Parser MessageToken
     literal = do
       lit <- manyTill anyChar endOfLiteral
       case lit of
         -- `unexpected` => terminate the `many` in the main function body
         []   -> unexpected "empty literal"
-        lit' -> pure $ RequestSpecLiteral (T.pack lit')
+        lit' -> pure $ MessageTokenLiteral (T.pack lit')
 
     endOfLiteral :: Parser ()
     endOfLiteral = lookAhead $ void (string "${") <|> void endOfLine
@@ -142,96 +142,65 @@ indentedLinesParser p combine = go Nothing
           Just _  -> (True, nl)
 
 
-requestSpecParser
-  :: Parser RequestSpec
-requestSpecParser =
-  RequestSpec <$> ( string "###"
-                    *> spaces
-                    *> string "Request"
-                    *> count 2 endOfLine
-                    *> many endOfLine
-                    *> indentedLinesParser requestSpecLiteralOrVariablesParser combine
-                  )
+messageSpecParser
+  :: String -- ^ "Request" or "Response"
+  -> Parser MessageSpec
+messageSpecParser msgName = do
+  msg <- string "###"
+         *> spaces
+         *> string msgName
+         *> count 2 endOfLine
+         *> many endOfLine
+         *> indentedLinesParser messageTokenParser combine
+  extractions <- optionMaybe $ try $ string "Extract:"
+                                     *> many1 endOfLine
+                                     *> many extractionParser
+  pure $ MessageSpec { messageSpecTokens      = msg
+                     , messageSpecExtractions = maybe [] id extractions
+                     }
   where
     combine
-      :: Maybe RequestSpecLiteralOrVariable
+      :: Maybe MessageToken
       -> [String]
-      -> Maybe RequestSpecLiteralOrVariable
-      -> [RequestSpecLiteralOrVariable]
+      -> Maybe MessageToken
+      -> [MessageToken]
     combine (Just a) [] Nothing = [a]
-    combine Nothing nls Nothing = [RequestSpecLiteral $ T.pack (concat nls)]
-    combine Nothing nls (Just (RequestSpecLiteral l)) = [RequestSpecLiteral (T.pack (concat nls) <> l)]
-    combine Nothing nls (Just v@(RequestSpecVariable _)) = [RequestSpecLiteral (T.pack (concat nls)), v]
-    combine (Just (RequestSpecLiteral l))  nls Nothing = [RequestSpecLiteral (l <> T.pack (concat nls))]
-    combine (Just (RequestSpecLiteral l1)) nls (Just (RequestSpecLiteral l2)) = [RequestSpecLiteral (l1 <> T.pack (concat nls) <> l2)]
-    combine (Just (RequestSpecLiteral l))  nls (Just v@(RequestSpecVariable _)) = [RequestSpecLiteral (l <> T.pack (concat nls)), v]
-    combine (Just v@(RequestSpecVariable _)) nls Nothing = [v, RequestSpecLiteral (T.pack (concat nls))]
-    combine (Just v@(RequestSpecVariable _)) nls (Just (RequestSpecLiteral l)) = [v, RequestSpecLiteral (T.pack (concat nls) <> l)]
-    combine (Just v1@(RequestSpecVariable _)) nls (Just v2@(RequestSpecVariable _)) = [v1, RequestSpecLiteral (T.pack (concat nls)), v2]
+    combine Nothing nls Nothing = [MessageTokenLiteral $ T.pack (concat nls)]
+    combine Nothing nls (Just (MessageTokenLiteral l)) = [MessageTokenLiteral (T.pack (concat nls) <> l)]
+    combine Nothing nls (Just v@(MessageTokenVariable _)) = [MessageTokenLiteral (T.pack (concat nls)), v]
+    combine (Just (MessageTokenLiteral l))  nls Nothing = [MessageTokenLiteral (l <> T.pack (concat nls))]
+    combine (Just (MessageTokenLiteral l1)) nls (Just (MessageTokenLiteral l2)) = [MessageTokenLiteral (l1 <> T.pack (concat nls) <> l2)]
+    combine (Just (MessageTokenLiteral l))  nls (Just v@(MessageTokenVariable _)) = [MessageTokenLiteral (l <> T.pack (concat nls)), v]
+    combine (Just v@(MessageTokenVariable _)) nls Nothing = [v, MessageTokenLiteral (T.pack (concat nls))]
+    combine (Just v@(MessageTokenVariable _)) nls (Just (MessageTokenLiteral l)) = [v, MessageTokenLiteral (T.pack (concat nls) <> l)]
+    combine (Just v1@(MessageTokenVariable _)) nls (Just v2@(MessageTokenVariable _)) = [v1, MessageTokenLiteral (T.pack (concat nls)), v2]
 
+    extractionParser
+      :: Parser (VariableIdentifier, Regex)
+    extractionParser = do
+      _ <- char '*'
+           *> spaces
+           *> char '`'
+      var <- variableIdentifier
+      _ <- spaces *> char '~' <* spaces
+      re <- regexParser
+      _ <- char '`' <* endOfLine
+      pure (var, re)
 
-responseSpecLiteralOrVariablesParser
-  :: Parser [ResponseSpecLiteralOrVariable]
-responseSpecLiteralOrVariablesParser =
-  many (try variableDefn <|> try variableUsage <|> literal)
-  where
-    variableDefn :: Parser ResponseSpecLiteralOrVariable
-    variableDefn = do
-      var <- string "${{" *> variableIdentifier
-      _ <- spaces *> string ":=" <* spaces
-      -- FIXME prohibit newlines in regexes?  escaped "/}}"?
-      regex <- char '/' *> manyTill anyChar (string "/}}")
-      pure $ ResponseSpecVariableExtraction $ ExtractedVariable var (T.pack regex)
-
-    variableUsage :: Parser ResponseSpecLiteralOrVariable
-    variableUsage = ResponseSpecVariableUsage <$> (string "${" *> variableIdentifier <* char '}')
-
-    literal :: Parser ResponseSpecLiteralOrVariable
-    literal = do
-      lit <- manyTill anyChar (lookAhead $ void (string "${") <|> void endOfLine)
-      case lit of
-        []   -> unexpected "empty literal"
-        lit' -> pure $ ResponseSpecLiteral (T.pack lit')
-
-
-responseSpecParser
-  :: Parser ResponseSpec
-responseSpecParser =
-  ResponseSpec <$> ( string "###"
-                     *> spaces
-                     *> string "Response"
-                     *> count 2 endOfLine
-                     *> many endOfLine
-                     *> indentedLinesParser responseSpecLiteralOrVariablesParser combine
-                   )
-  where
-    combine
-      :: Maybe ResponseSpecLiteralOrVariable
-      -> [String]
-      -> Maybe ResponseSpecLiteralOrVariable
-      -> [ResponseSpecLiteralOrVariable]
-    combine Nothing [] Nothing = []
-    combine (Just a) [] Nothing = [a]
-    combine Nothing nls Nothing = [ResponseSpecLiteral $ T.pack (concat nls)]
-    combine Nothing nls (Just (ResponseSpecLiteral l)) = [ResponseSpecLiteral (T.pack (concat nls) <> l)]
-    combine Nothing nls (Just v) = [ResponseSpecLiteral (T.pack (concat nls)), v]
-    combine (Just (ResponseSpecLiteral l))  nls Nothing = [ResponseSpecLiteral (l <> T.pack (concat nls))]
-    combine (Just (ResponseSpecLiteral l1)) nls (Just (ResponseSpecLiteral l2)) = [ResponseSpecLiteral (l1 <> T.pack (concat nls) <> l2)]
-    combine (Just (ResponseSpecLiteral l))  nls (Just v@(ResponseSpecVariableUsage _)) = [ResponseSpecLiteral (l <> T.pack (concat nls)), v]
-    combine (Just (ResponseSpecLiteral l))  nls (Just v@(ResponseSpecVariableExtraction _)) = [ResponseSpecLiteral (l <> T.pack (concat nls)), v]
-    combine (Just v) nls Nothing = [v, ResponseSpecLiteral (T.pack (concat nls))]
-    combine (Just v) nls (Just (ResponseSpecLiteral l)) = [v, ResponseSpecLiteral (T.pack (concat nls) <> l)]
-    combine (Just v1) nls (Just v2) = [v1, ResponseSpecLiteral (T.pack (concat nls)), v2]
+    regexParser
+      :: Parser Regex
+     -- FIXME allow escaped backslashes
+    regexParser = Regex . T.pack <$> (char '/' *> manyTill anyChar (char '/'))
 
 
 fileParser
-  :: Parser [(Text, RequestSpec, ResponseSpec)]
+  :: Parser [(Text, MessageSpec, MessageSpec)]
 fileParser = many $ do
   call <- callSpecNameParser
   _ <- many1 endOfLine
-  req <- requestSpecParser
+  req <- messageSpecParser "Request"
   _ <- many endOfLine
-  resp <- responseSpecParser
+  resp <- messageSpecParser "Response"
   _ <- many endOfLine
   return (call, req, resp)
 
@@ -239,7 +208,7 @@ fileParser = many $ do
 parseFile
   :: Text
   -> Text
-  -> Either ParseError [(Text, RequestSpec, ResponseSpec)]
+  -> Either ParseError [(Text, MessageSpec, MessageSpec)]
 parseFile srcName = parse fileParser (T.unpack srcName)
 
 

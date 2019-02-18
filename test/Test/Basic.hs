@@ -14,7 +14,7 @@ import           HttpTest.Runner
 import           HttpTest.Spec
 
 
-theRequest :: Warp.Port -> Validation [MkRequestError] HTTP.Request
+theRequest :: Warp.Port -> Validation [MessageCreateError] HTTP.Request
 theRequest port =
   mkRequest
     HTTP.GET
@@ -23,15 +23,16 @@ theRequest port =
     Nothing
 
 
-expectedResponse :: ResponseSpec
+expectedResponse :: MessageSpec
 expectedResponse =
-  ResponseSpec ( [ResponseSpecLiteral ( T.intercalate "\n" [ "200 OK"
-                                                           , "Content-Type: text/plain; charset=utf-8"
-                                                           , ""
-                                                           , "Hello, world!"]
-                                      )
-                 ]
-               )
+  MessageSpec { messageSpecTokens = [MessageTokenLiteral ( T.intercalate "\n" [ "200 OK"
+                                                                              , "Content-Type: text/plain; charset=utf-8"
+                                                                              , ""
+                                                                              , "Hello, world!"]
+                                                         )
+                                    ]
+              , messageSpecExtractions = []
+              }
 
 
 unit_basic :: Assertion

@@ -1,8 +1,7 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 module HttpTest.Runner
-    ( MkRequestError
-    , matchResponse
+    ( matchResponse
     , mkRequest
     , performRequest
     ) where
@@ -31,7 +30,7 @@ mkRequest
   -> Text
   -> [HTTP.Header]
   -> Maybe Text
-  -> Validation [MkRequestError] HTTP.Request
+  -> Validation [MessageCreateError] HTTP.Request
 mkRequest method url headers body =
   case HTTP.parseRequest (T.unpack url) of
     Nothing ->
@@ -52,12 +51,12 @@ performRequest request = do
 
 
 matchResponse
-  :: ResponseSpec
+  :: MessageSpec
   -> Environment
   -> HTTP.Response BL.ByteString
-  -> Validation [ResponseMatchFailure] ()
-matchResponse (ResponseSpec rs) env response =
-  case splitResponse rs env of
+  -> Validation [MessageMatchFailure] ()
+matchResponse (MessageSpec ts _) env response =
+  case splitResponse ts env of
     Failure f ->
       Failure f
     Success (status, headers, body) ->
@@ -75,29 +74,27 @@ matchResponse (ResponseSpec rs) env response =
 
 substituteResp
   :: Environment
-  -> [ResponseSpecLiteralOrVariable]
-  -> Validation [ResponseMatchFailure] Text
+  -> [MessageToken]
+  -> Validation [MessageMatchFailure] Text
 substituteResp (Environment env) = foldl go (Success "")
   where
-    go (Success t) (ResponseSpecLiteral  t') = Success (t <> t')
-    go (Success t) (ResponseSpecVariableUsage v) =
+    go (Success t) (MessageTokenLiteral  t') = Success (t <> t')
+    go (Success t) (MessageTokenVariable v)  =
       case M.lookup v env of
         Just t' -> Success (t <> t')
-        Nothing -> Failure [MissingResponseVariable v]
+        Nothing -> Failure [MissingMatchVariable v]
 
-    go r@(Failure _)   (ResponseSpecLiteral  _) = r
-    go r@(Failure mvs) (ResponseSpecVariableUsage v) =
+    go r@(Failure _)   (MessageTokenLiteral  _) = r
+    go r@(Failure mvs) (MessageTokenVariable v) =
       case M.lookup v env of
         Just _  -> r
-        Nothing -> Failure (mvs <> [MissingResponseVariable v])
-
-    go _ (ResponseSpecVariableExtraction _) = undefined
+        Nothing -> Failure (mvs <> [MissingMatchVariable v])
 
 
 splitResponse
-  :: [ResponseSpecLiteralOrVariable]
+  :: [MessageToken]
   -> Environment
-  -> Validation [ResponseMatchFailure] (Text, [Text], Maybe Text)
+  -> Validation [MessageMatchFailure] (Text, [Text], Maybe Text)
 splitResponse lvs env =
   case substituteResp env lvs of
     Failure f -> Failure f
@@ -112,7 +109,7 @@ splitResponse lvs env =
             if T.null body' then
               Success (statusLine, headers, Nothing)
             else
-              Failure [UnparseableResponseSpec t]
+              Failure [UnparseableMessage t]
           (statusLine:headers, Just "") ->
             Success (statusLine, headers, Nothing)
           (statusLine:headers, Just b)  ->
@@ -122,7 +119,7 @@ splitResponse lvs env =
 matchResponseStatus
   :: Text
   -> HTTP.Status
-  -> [ResponseMatchFailure]
+  -> [MessageMatchFailure]
 matchResponseStatus expected actual@(HTTP.Status s msg) =
   if expected == (T.pack (show s) <> " " <> TE.decodeUtf8 msg) then
     []
@@ -133,7 +130,7 @@ matchResponseStatus expected actual@(HTTP.Status s msg) =
 matchResponseHeaders
   :: [Text]
   -> [HTTP.Header]
-  -> [ResponseMatchFailure]
+  -> [MessageMatchFailure]
 matchResponseHeaders expected actual =
   mapMaybe f expected
   where
@@ -156,7 +153,7 @@ matchResponseHeaders expected actual =
 matchResponseBody
   :: Maybe Text
   -> BL.ByteString
-  -> [ResponseMatchFailure]
+  -> [MessageMatchFailure]
 
 matchResponseBody expected actual =
   let

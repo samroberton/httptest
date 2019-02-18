@@ -17,26 +17,20 @@ data ExtractedVariable =
   deriving (Show, Eq)
 
 
-data RequestSpecLiteralOrVariable =
-  RequestSpecLiteral Text
-  | RequestSpecVariable VariableIdentifier
+data MessageToken =
+  MessageTokenLiteral Text
+  | MessageTokenVariable VariableIdentifier
   deriving (Show, Eq)
 
 
-newtype RequestSpec =
-  RequestSpec { unRequestSpec :: [RequestSpecLiteralOrVariable] }
+newtype Regex =
+  Regex { unRegex :: Text }
   deriving (Show, Eq)
 
-
-data ResponseSpecLiteralOrVariable =
-  ResponseSpecLiteral Text
-  | ResponseSpecVariableUsage VariableIdentifier
-  | ResponseSpecVariableExtraction ExtractedVariable
-  deriving (Show, Eq)
-
-
-newtype ResponseSpec =
-  ResponseSpec { unResponseSpec :: [ResponseSpecLiteralOrVariable] }
+data MessageSpec =
+  MessageSpec { messageSpecTokens      :: [MessageToken]
+              , messageSpecExtractions :: [(VariableIdentifier, Regex)]
+              }
   deriving (Show, Eq)
 
 
@@ -45,17 +39,17 @@ newtype Environment =
   deriving (Show, Eq)
 
 
-data ResponseMatchFailure =
-  MissingResponseVariable VariableIdentifier
-  | UnparseableResponseSpec Text
+data MessageMatchFailure =
+  MissingMatchVariable VariableIdentifier
+  | UnparseableMessage Text
   | DifferentStatus Text HTTP.Status
   | DifferentHeader HTTP.Header [HTTP.Header]
   | DifferentBody (Maybe Text) (Maybe Text)
   deriving (Show, Eq)
 
 
-data MkRequestError =
-  MissingVariable VariableIdentifier
+data MessageCreateError =
+  MissingUsedVariable VariableIdentifier
   | InvalidMethod Text
   | InvalidUrl Text
   deriving (Show, Eq)
