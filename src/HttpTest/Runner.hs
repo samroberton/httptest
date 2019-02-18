@@ -24,11 +24,6 @@ import qualified Network.HTTP.Types      as HTTP
 import           HttpTest.Spec
 
 
-data MkRequestError =
-  MissingVariable VariableIdentifier
-  | InvalidMethod Text
-  | InvalidUrl Text
-  deriving (Show, Eq)
 
 
 mkRequest
@@ -96,6 +91,8 @@ substituteResp (Environment env) = foldl go (Success "")
         Just _  -> r
         Nothing -> Failure (mvs <> [MissingResponseVariable v])
 
+    go _ (ResponseSpecVariableExtraction _) = undefined
+
 
 splitResponse
   :: [ResponseSpecLiteralOrVariable]
@@ -107,17 +104,19 @@ splitResponse lvs env =
     Success t ->
       let
         (preamble, body') = T.breakOn "\n\n" t
-        (statusLine:headers) = T.splitOn "\n" preamble
       in
-        case T.stripPrefix "\n\n" body' of
-          Nothing ->
+        case (T.splitOn "\n" preamble, T.stripPrefix "\n\n" body') of
+          ([], _) ->
+            error "T.splitOn returned empty list!"
+          (statusLine:headers, Nothing) ->
             if T.null body' then
               Success (statusLine, headers, Nothing)
             else
               Failure [UnparseableResponseSpec t]
-          (Just "") ->
+          (statusLine:headers, Just "") ->
             Success (statusLine, headers, Nothing)
-          (Just b)  -> Success (statusLine, headers, Just b)
+          (statusLine:headers, Just b)  ->
+            Success (statusLine, headers, Just b)
 
 
 matchResponseStatus

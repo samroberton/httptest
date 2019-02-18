@@ -5,16 +5,10 @@ module HttpTest.MarkdownParser
     ( parseFile
     ) where
 
-import qualified Debug.Trace
 
-import qualified Data.ByteString.Char8 as BC
 import           Data.Functor          (void)
 import           Data.Text             (Text)
 import qualified Data.Text             as T
-import qualified Data.Text.Encoding    as TE
-
-import qualified Network.HTTP.Client   as HTTP
-import qualified Network.HTTP.Types    as HTTP
 
 import           Text.Parsec
 import           Text.Parsec.Text
@@ -216,15 +210,18 @@ responseSpecParser =
       -> [String]
       -> Maybe ResponseSpecLiteralOrVariable
       -> [ResponseSpecLiteralOrVariable]
+    combine Nothing [] Nothing = []
     combine (Just a) [] Nothing = [a]
     combine Nothing nls Nothing = [ResponseSpecLiteral $ T.pack (concat nls)]
     combine Nothing nls (Just (ResponseSpecLiteral l)) = [ResponseSpecLiteral (T.pack (concat nls) <> l)]
+    combine Nothing nls (Just v) = [ResponseSpecLiteral (T.pack (concat nls)), v]
     combine (Just (ResponseSpecLiteral l))  nls Nothing = [ResponseSpecLiteral (l <> T.pack (concat nls))]
     combine (Just (ResponseSpecLiteral l1)) nls (Just (ResponseSpecLiteral l2)) = [ResponseSpecLiteral (l1 <> T.pack (concat nls) <> l2)]
     combine (Just (ResponseSpecLiteral l))  nls (Just v@(ResponseSpecVariableUsage _)) = [ResponseSpecLiteral (l <> T.pack (concat nls)), v]
     combine (Just (ResponseSpecLiteral l))  nls (Just v@(ResponseSpecVariableExtraction _)) = [ResponseSpecLiteral (l <> T.pack (concat nls)), v]
-    combine (Just v@(ResponseSpecVariableUsage _)) nls (Just (ResponseSpecLiteral l)) = [v, ResponseSpecLiteral (T.pack (concat nls) <> l)]
-    combine (Just v@(ResponseSpecVariableExtraction _)) nls (Just (ResponseSpecLiteral l)) = [v, ResponseSpecLiteral (T.pack (concat nls) <> l)]
+    combine (Just v) nls Nothing = [v, ResponseSpecLiteral (T.pack (concat nls))]
+    combine (Just v) nls (Just (ResponseSpecLiteral l)) = [v, ResponseSpecLiteral (T.pack (concat nls) <> l)]
+    combine (Just v1) nls (Just v2) = [v1, ResponseSpecLiteral (T.pack (concat nls)), v2]
 
 
 fileParser

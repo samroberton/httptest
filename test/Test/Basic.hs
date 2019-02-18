@@ -10,7 +10,6 @@ import qualified Network.Wai.Handler.Warp as Warp
 
 import           Test.Tasty.HUnit
 
-import           HttpTest.MarkdownParser
 import           HttpTest.Runner
 import           HttpTest.Spec
 
@@ -52,5 +51,5 @@ unit_basic =
 
 
 app :: Wai.Application
-app req respond =
+app _req respond =
   respond $ Wai.responseLBS HTTP.status200 [ ("Content-Type", "text/plain; charset=utf-8") ] "Hello, world!"

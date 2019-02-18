@@ -1,3 +1,3 @@
-:set -fWall
+:set -Wall -Werror -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
 :set -isrc
 :set -itest

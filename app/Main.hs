@@ -1,15 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import qualified Network.HTTP.Client     as HTTP
-import qualified Network.HTTP.Types      as HTTP
+import           Data.Either.Validation (Validation (..))
+import qualified Data.Map               as M
 
-import           HttpTest.MarkdownParser
+import qualified Network.HTTP.Client    as HTTP
+import qualified Network.HTTP.Types     as HTTP
+
 import           HttpTest.Runner
 import           HttpTest.Spec
 
 
-theRequest :: Either MkRequestError HTTP.Request
+theRequest :: Validation [MkRequestError] HTTP.Request
 theRequest =
   mkRequest
     HTTP.GET
@@ -20,18 +22,16 @@ theRequest =
 
 expectedResponse :: ResponseSpec
 expectedResponse =
-  ResponseSpec { respSpecStatus  = HTTP.mkStatus 200 "OK"
-               , respSpecHeaders = [ ("Content-Type", "text/html; charset=utf-8") ]
-               , respSpecBody    = Nothing
-               }
+  ResponseSpec [ ResponseSpecLiteral "200 OK\nContent-Type: text/html; charset=utf-8" ]
+
 
 
 main :: IO ()
 main =
   case theRequest of
-    Left e ->
+    Failure e ->
       print e
-    Right request -> do
+    Success request -> do
       response <- performRequest request
-      let result = matchResponse expectedResponse response
+      let result = matchResponse expectedResponse (Environment M.empty) response
       print result

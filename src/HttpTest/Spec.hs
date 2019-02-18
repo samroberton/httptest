@@ -52,3 +52,10 @@ data ResponseMatchFailure =
   | DifferentHeader HTTP.Header [HTTP.Header]
   | DifferentBody (Maybe Text) (Maybe Text)
   deriving (Show, Eq)
+
+
+data MkRequestError =
+  MissingVariable VariableIdentifier
+  | InvalidMethod Text
+  | InvalidUrl Text
+  deriving (Show, Eq)

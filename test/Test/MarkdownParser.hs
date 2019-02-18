@@ -4,7 +4,6 @@ module Test.MarkdownParser where
 import           Data.Text               (Text)
 import qualified Data.Text               as T
 import qualified Data.Text.IO            as T
-import qualified Network.HTTP.Types      as HTTP
 
 import           Test.Tasty.HUnit
 
